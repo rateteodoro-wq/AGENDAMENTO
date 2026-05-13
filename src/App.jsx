@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 const ROOMS = [
   { id: "conquista", name: "Sala Conquista", color: "bg-rose-500", light: "bg-rose-50", border: "border-rose-300", text: "text-rose-700", badge: "bg-rose-500" },
   { id: "inovacao", name: "Sala Inovação", color: "bg-blue-500", light: "bg-blue-50", border: "border-blue-300", text: "text-blue-700", badge: "bg-blue-500" },
+  { id: "treinamentos", name: "Sala de Treinamentos", color: "bg-emerald-500", light: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-700", badge: "bg-emerald-500" },
 ];
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex"];
@@ -39,6 +40,7 @@ export default function App() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [detail, setDetail] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [toast, setToast] = useState(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("week");
@@ -182,7 +184,7 @@ export default function App() {
                       {dayBooks.map(b => {
                         const rm = room(b.room);
                         return (
-                          <div key={b.id} onClick={() => { setDetail(b); setModal("detail"); }}
+                          <div key={b.id} onClick={() => { setDetail(b); setModal("detail"); setConfirmDelete(false); }}
                             className={`${rm.light} ${rm.border} border rounded-lg p-1.5 cursor-pointer hover:brightness-95 transition`}>
                             <div className={`text-xs font-bold ${rm.text}`}>{b.start}–{b.end}</div>
                             <div className="text-xs text-gray-700 truncate leading-tight">{b.subject}</div>
@@ -214,7 +216,7 @@ export default function App() {
             {upcomingBookings.map(b => {
               const rm = room(b.room);
               return (
-                <div key={b.id} onClick={() => { setDetail(b); setModal("detail"); }}
+                <div key={b.id} onClick={() => { setDetail(b); setModal("detail"); setConfirmDelete(false); }}
                   className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-center gap-4 cursor-pointer hover:shadow-sm transition">
                   <div className={`w-1 self-stretch rounded-full ${rm.color}`}></div>
                   <div className="flex-1 min-w-0">
@@ -300,7 +302,7 @@ export default function App() {
       {modal === "detail" && detail && (() => {
         const rm = room(detail.room);
         return (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => setModal(null)}>
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4" onClick={() => { setModal(null); setConfirmDelete(false); }}>
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
               <div className={`${rm.light} px-6 py-4 rounded-t-2xl border-b ${rm.border}`}>
                 <div className={`text-xs font-bold uppercase tracking-wide ${rm.text} mb-1`}>{rm.name}</div>
@@ -321,13 +323,19 @@ export default function App() {
                 </div>
               </div>
               <div className="px-6 pb-6 flex gap-3">
-                <button onClick={() => setModal(null)}
+                <button onClick={() => { setModal(null); setConfirmDelete(false); }}
                   className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
                   Fechar
                 </button>
-                <button onClick={() => handleDelete(detail.id)}
-                  className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2.5 rounded-xl text-sm font-semibold transition">
-                  Cancelar Reserva
+                <button onClick={() => {
+                  if (confirmDelete) {
+                    handleDelete(detail.id);
+                  } else {
+                    setConfirmDelete(true);
+                  }
+                }}
+                  className={`flex-1 text-white py-2.5 rounded-xl text-sm font-semibold transition ${confirmDelete ? 'bg-red-700 hover:bg-red-800' : 'bg-red-500 hover:bg-red-600'}`}>
+                  {confirmDelete ? "Tem certeza? Confirmar" : "Cancelar Reserva"}
                 </button>
               </div>
             </div>
