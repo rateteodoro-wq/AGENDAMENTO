@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "./supabaseClient";
 
 const ROOMS = [
   { id: "conquista", name: "Sala Conquista", color: "bg-rose-500", light: "bg-rose-50", border: "border-rose-300", text: "text-rose-700", badge: "bg-rose-500" },
@@ -45,24 +46,36 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState("week");
 
-  // CORREÇÃO 1: Substituição de window.storage por localStorage nativo no carregamento
+  // Carrega dados do Supabase e inscreve para atualizações em tempo real
   useEffect(() => {
-    try {
-      const r = localStorage.getItem("booking-salas-v2");
-      if (r) setBookings(JSON.parse(r));
-    } catch (error) {
-      console.error("Erro ao carregar dados:", error);
-    }
-    setLoading(false);
-  }, []);
+    const fetchBookings = async () => {
+      const { data, error } = await supabase.from('bookings').select('*');
+      if (error) {
+        console.error("Erro ao carregar do Supabase:", error);
+      } else if (data) {
+        const mapped = data.map(b => ({
+          ...b,
+          start: b.start_time,
+          end: b.end_time
+        }));
+        setBookings(mapped);
+      }
+      setLoading(false);
+    };
 
-  // CORREÇÃO 2: Substituição de window.storage por localStorage nativo na gravação
-  const persist = useCallback((list) => {
-    try {
-      localStorage.setItem("booking-salas-v2", JSON.stringify(list));
-    } catch (error) {
-      console.error("Erro ao salvar dados:", error);
-    }
+    fetchBookings();
+
+    // Inscrição para Realtime (atualiza a tela quando outro usuário mexe)
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => {
+        fetchBookings();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const showToast = (msg, type = "ok") => {
@@ -80,7 +93,7 @@ export default function App() {
     setModal("form");
   };
 
-  const handleBook = () => {
+  const handleBook = async () => {
     if (!form.subject.trim() || !form.responsible.trim()) {
       showToast("Preencha assunto e responsável.", "err"); return;
     }
@@ -94,17 +107,44 @@ export default function App() {
     if (conflict) {
       showToast(`Conflito! ${ROOMS.find(r=>r.id===form.room).name} já está reservada nesse horário.`, "err"); return;
     }
-    const nb = { ...form, id: `${Date.now()}` };
-    const upd = [...bookings, nb].sort((a, b) => a.date+a.start > b.date+b.start ? 1 : -1);
-    setBookings(upd); persist(upd);
+    
+    // Inserindo no Supabase
+    const nb = { 
+      id: `${Date.now()}`, 
+      room: form.room,
+      date: form.date,
+      start_time: form.start,
+      end_time: form.end,
+      subject: form.subject,
+      responsible: form.responsible
+    };
+    
+    const { error } = await supabase.from('bookings').insert([nb]);
+    if (error) {
+      showToast("Erro ao salvar no banco de dados.", "err");
+      console.error(error);
+      return;
+    }
+
+    const newBooking = { ...nb, start: nb.start_time, end: nb.end_time };
+    const upd = [...bookings, newBooking].sort((a, b) => a.date+a.start > b.date+b.start ? 1 : -1);
+    setBookings(upd);
     setModal(null);
     showToast("✅ Sala reservada com sucesso!");
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
+    const { error } = await supabase.from('bookings').delete().eq('id', id);
+    if (error) {
+      showToast("Erro ao cancelar no banco de dados.", "err");
+      console.error(error);
+      return;
+    }
+
     const upd = bookings.filter(b => b.id !== id);
-    setBookings(upd); persist(upd);
+    setBookings(upd); 
     setModal(null); setDetail(null);
+    setConfirmDelete(false);
     showToast("Reserva cancelada.");
   };
 
